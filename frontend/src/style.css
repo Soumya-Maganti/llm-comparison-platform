@@ -1,0 +1,38 @@
+body {
+  margin: 0;
+}
+.brand-mark {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  background: #31584f;
+  border-radius: 9px;
+  font-size: 25px;
+}
+.responses {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+}
+.response-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.8 !important;
+  flex: 1;
+}
+.bottom-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
+  gap: 24px;
+  align-items: start;
+}
+@media (max-width: 700px) {
+  .responses,
+  .bottom-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .desktop-break {
+    display: none;
+  }
+}

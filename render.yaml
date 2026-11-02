@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: llm-comparison-api
+    runtime: python
+    plan: free
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.13.12
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false
+      - key: MODEL_A
+        value: gemini-3.5-flash-lite
+      - key: MODEL_B
+        value: gemini-3.1-flash-lite
