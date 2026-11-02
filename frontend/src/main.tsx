@@ -9,7 +9,6 @@ import {
   CircularProgress,
   Container,
   CssBaseline,
-  Divider,
   LinearProgress,
   Paper,
   Stack,
@@ -20,6 +19,7 @@ import {
   createTheme,
 } from "@mui/material";
 import { browserId, request, type Comparison, type Leaderboard } from "./api";
+import ResponseCard from "./ResponseCard";
 import "./style.css";
 
 const theme = createTheme({
@@ -302,57 +302,20 @@ function App() {
             </Paper>
             <Box className="responses">
               {comparison.responses.map((response, i) => (
-                <Paper
+                <ResponseCard
                   key={response.id}
-                  sx={{
-                    p: 3,
-                    display: "flex",
-                    flexDirection: "column",
-                    borderTop: `3px solid ${i === 0 ? "#176b58" : "#c27c30"}`,
-                  }}
-                >
-                  <Stack
-                    direction="row"
-                    alignItems="center"
-                    gap={1}
-                    flexWrap="wrap"
-                  >
-                    <Typography fontWeight={750}>{response.model}</Typography>
-                    <Chip
-                      size="small"
-                      label={`${(response.latency_ms / 1000).toFixed(2)}s`}
-                      sx={{ ml: "auto" }}
-                    />
-                  </Stack>
-                  <Divider sx={{ my: 2 }} />
-                  {response.error ? (
-                    <Alert severity="warning">{response.error}</Alert>
-                  ) : (
-                    <Typography component="div" className="response-text">
-                      {response.text}
-                    </Typography>
-                  )}
-                  <Button
-                    sx={{ mt: 3 }}
-                    variant={
-                      comparison.voted_response_id === response.id
-                        ? "contained"
-                        : "outlined"
-                    }
-                    disabled={
-                      !canVote ||
-                      !!comparison.voted_response_id ||
-                      voting ||
-                      loading ||
-                      historyLoading
-                    }
-                    onClick={() => vote(response.id)}
-                  >
-                    {comparison.voted_response_id === response.id
-                      ? "✓ Your preferred response"
-                      : "Vote for this response"}
-                  </Button>
-                </Paper>
+                  response={response}
+                  accent={i === 0 ? "#176b58" : "#c27c30"}
+                  selected={comparison.voted_response_id === response.id}
+                  votingDisabled={
+                    !canVote ||
+                    !!comparison.voted_response_id ||
+                    voting ||
+                    loading ||
+                    historyLoading
+                  }
+                  onVote={() => vote(response.id)}
+                />
               ))}
             </Box>
             {!canVote && (
