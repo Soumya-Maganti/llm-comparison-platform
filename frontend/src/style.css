@@ -71,7 +71,4 @@ body {
   .bottom-grid {
     grid-template-columns: minmax(0, 1fr);
   }
-  .desktop-break {
-    display: none;
-  }
 }

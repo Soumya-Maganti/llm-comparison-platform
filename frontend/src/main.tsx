@@ -178,9 +178,11 @@ function App() {
         >
           TWO MODELS. ONE PROMPT.
         </Typography>
-        <Typography variant="h3" sx={{ fontSize: { xs: 34, md: 48 }, mt: 1 }}>
-          Better answers start
-          <br className="desktop-break" /> with a comparison.
+        <Typography
+          variant="h3"
+          sx={{ fontSize: { xs: 34, md: 40, lg: 48 }, mt: 1 }}
+        >
+          Better answers start with a comparison.
         </Typography>
         <Typography color="text.secondary" sx={{ mt: 2, mb: 4, maxWidth: 650 }}>
           Explore how two Gemini models think. Compare their responses, choose
