@@ -14,6 +14,8 @@ def setup(tmp_path):
         _env_file=None,
         gemini_api_key="test-only",
         database_url=f'sqlite:///{tmp_path / "test.db"}',
+        comparison_limit_per_minute=1000,
+        comparison_limit_per_day=1000,
     )
     active = set()
 

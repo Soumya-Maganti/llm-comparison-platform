@@ -1,5 +1,7 @@
 # Optional deployment
 
+Current demo: [frontend](https://llm-comparison-platform.vercel.app/), [backend health](https://llm-comparison-api.onrender.com/api/health), [API docs](https://llm-comparison-api.onrender.com/docs).
+
 The project is configured for Vercel Hobby, a Render Free Web Service, and Neon Free PostgreSQL. Deployment is optional and is not required to run or test the application locally. Free-plan terms and limits can change; check the provider's creation summary before proceeding. Do not select upgrades or enter billing details for this demo.
 
 ## Prerequisites
@@ -37,6 +39,8 @@ Set these environment variables:
 | `MODEL_A` | `gemini-3.5-flash-lite` |
 | `MODEL_B` | `gemini-3.1-flash-lite` |
 | `CORS_ORIGINS` | `[]` initially; set the actual frontend origin after Vercel deployment |
+| `COMPARISON_LIMIT_PER_MINUTE` | Optional; default `3`, shared across all visitors |
+| `COMPARISON_LIMIT_PER_DAY` | Optional; default `30`, shared across all visitors |
 
 The Blueprint explicitly selects `plan: free`; the manual creation form must also select Free. No Render database or persistent disk is needed. The local backend environment file is not uploaded: Render supplies the production values.
 
@@ -76,4 +80,4 @@ Use only the intended origins rather than a wildcard. A Vercel preview URL is a 
 
 Use the project's existing Gemini quota without enabling API billing. Free hosting does not change the billing settings of the Google project. If a quota is exhausted, pause the demo or wait for the allowance to reset rather than upgrading.
 
-Review the current [Vercel Hobby terms](https://vercel.com/docs/plans/hobby), [Render Free limitations](https://render.com/docs/free), [Neon Free allowances](https://neon.com/pricing), and [Neon connection instructions](https://neon.com/docs/connect/connect-from-any-app). The application has no authentication or rate limiting; see [DESIGN_NOTES.md](DESIGN_NOTES.md) before opening it to unrestricted traffic.
+Review the current [Vercel Hobby terms](https://vercel.com/docs/plans/hobby), [Render Free limitations](https://render.com/docs/free), [Neon Free allowances](https://neon.com/pricing), and [Neon connection instructions](https://neon.com/docs/connect/connect-from-any-app). The application has a database-backed global generation cap, but no authentication or per-user abuse protection; see [DESIGN_NOTES.md](DESIGN_NOTES.md) before opening it to unrestricted traffic. Counters use the same SQLite/PostgreSQL database and work across workers without trusting proxy headers. Failures consume reservations, rejected requests return `Retry-After`, and counters are not reset during deployment. No Redis, background service or paid add-on is needed. Health does not verify remaining generation allowance. Check Google AI Studio billing and quotas separately; hosting plans cannot establish Gemini's billing tier.

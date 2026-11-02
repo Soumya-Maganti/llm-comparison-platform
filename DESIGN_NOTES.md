@@ -16,11 +16,13 @@ Voting requires two successful responses. This avoids treating a provider outage
 
 ## Persistence and scoring
 
-SQLAlchemy models three tables:
+SQLAlchemy models three tables for comparisons and votes:
 
 - `comparisons`: prompt, browser identifier, and creation timestamp.
 - `responses`: model ID, text or error, and latency, linked to a comparison.
 - `votes`: chosen response, browser identifier, and timestamp, linked to a comparison.
+
+A fourth table, `generation_limits`, stores two shared counters for fixed UTC minute/day windows. Each comparison atomically reserves both counters before calling Gemini. SQLite/PostgreSQL upserts use conditional updates, so concurrent workers cannot exceed the allowance; rejection rolls back both updates. Defaults are 3 comparisons per minute and 30 per day. Reservations remain consumed after provider failure or client disconnection. Only two counter rows are retained, and restarts do not reset them. This avoids IP-based limits and assumptions about trusted Render proxy headers. One visitor can still exhaust the allowance for everyone; boundary bursts, unbounded traffic to other endpoints, and denial of service remain possible.
 
 Foreign keys preserve references. Before accepting a vote, the API checks that the browser identifier matches the comparison owner and that the selected response belongs to that comparison. A unique `(comparison_id, browser_id)` constraint prevents a second vote, including concurrent duplicate requests. Votes cannot be changed through the API.
 
@@ -32,13 +34,15 @@ Synchronous SQLAlchemy sessions reduce dependency and implementation complexity.
 
 ## Security and identity
 
-Gemini requests originate from the backend. Keys and database credentials are read from its environment, not sent to the frontend. SDK exception details are not returned because they can contain request data or credentials. Model output is rendered as plain React text, without raw HTML. Prompts are limited to 12,000 characters, and CORS uses an explicit origin list.
+Gemini requests originate from the backend. Keys and database credentials are read from its environment, not sent to the frontend. SDK exception details are not returned because they can contain request data or credentials. Provider failure logs contain only an allowlisted model identifier, numeric HTTP status, fixed error category, and parsed retry duration when available. Raw exceptions, prompts, outputs and credentials are never included in these diagnostics. Model output is rendered as plain React text, without raw HTML. Prompts are limited to 12,000 characters, and CORS uses an explicit origin list.
 
-The browser UUID provides continuity without a login flow. It can be copied or reset, so matching it is not authentication or protection against multiple identities. CORS controls browser access; it does not stop direct API clients. Authentication, request quotas, retention rules, and rate limiting would be necessary before broader public use. Prompt and response storage should also be disclosed to users, as it is in the application and README.
+The browser UUID provides continuity without a login flow. It can be copied or reset, so matching it is not authentication or protection against multiple identities. Anyone who obtains the identifier can retrieve its history; access logs may contain history query identifiers. CORS controls browser access; it does not stop direct API clients. The global generation cap limits model operations but does not replace authentication, per-user quotas, retention rules or broader abuse protection. Prompt and response storage should also be disclosed to users, as it is in the application and README.
 
 ## Verification
 
 Backend tests use real temporary SQLite databases and an injected fake provider. They cover concurrency, validation, browser isolation, vote ownership, duplicate rejection, partial failures, pagination, and persistence across application instances. Leaderboard checks include zero votes, a two-to-one split across browser identities, and an unvoted comparison. CORS tests check an allowed origin and a rejected origin.
+
+Additional protection tests verify minute/day boundaries, persistence across restarts, reservations from separate concurrent database engines, rejection rollback, and that rejected requests never call the provider. Diagnostic tests check allowlisted status/category/retry fields, timeout reporting, and exclusion of sensitive sentinel values. The keyboard-scrolling browser test waits for `scrollend` before comparing panel offsets, avoiding assertions during native scroll animation.
 
 PostgreSQL DDL compilation checks schema portability without a database server. It does not establish live PostgreSQL connectivity. Playwright runs the real frontend and a test-only API with temporary storage. It checks the user flow, a fresh browser context with restored local storage, responsive layout, and error handling. Mocked tests do not verify Gemini availability or quota.
 
@@ -46,4 +50,4 @@ The opt-in live test uses the production provider integration and a temporary da
 
 ## Future improvements
 
-The next operational improvements would be schema migrations, live PostgreSQL integration tests, and authentication and rate limits for a public service. Blind model labels, ties, streaming, and richer scoring are possible product improvements, but are outside the assessment requirements.
+The next operational improvements would be schema migrations, live PostgreSQL integration tests, authentication and per-user abuse controls. Blind model labels, ties, streaming, and richer scoring are possible product improvements, but are outside the assessment requirements.

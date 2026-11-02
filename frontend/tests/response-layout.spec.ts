@@ -42,6 +42,21 @@ test("desktop responses align, scroll independently with the keyboard, and expan
   const regions = page.getByRole("region", { name: /^Response from/ });
   const first = regions.first();
   const second = regions.nth(1);
+  // Keyboard scrolling animates even after scrollTop becomes positive. Wait for
+  // the browser's scrollend event before comparing the two independent panels.
+  async function pageDown(region: typeof first) {
+    await region.focus();
+    await region.evaluate((element) => {
+      element.setAttribute("data-scroll-finished", "false");
+      element.addEventListener(
+        "scrollend",
+        () => element.setAttribute("data-scroll-finished", "true"),
+        { once: true },
+      );
+    });
+    await region.press("PageDown");
+    await expect(region).toHaveAttribute("data-scroll-finished", "true");
+  }
   const cards = page.locator(".response-card");
   const cardSizes = await cards.evaluateAll((elements) =>
     elements.map((element) => element.getBoundingClientRect().height),
@@ -50,15 +65,13 @@ test("desktop responses align, scroll independently with the keyboard, and expan
   expect(await first.evaluate((element) => element.clientHeight)).toBe(450);
   expect(await second.evaluate((element) => element.clientHeight)).toBe(450);
 
-  await first.focus();
-  await first.press("PageDown");
+  await pageDown(first);
   await expect
     .poll(() => first.evaluate((element) => element.scrollTop))
     .toBeGreaterThan(0);
   expect(await second.evaluate((element) => element.scrollTop)).toBe(0);
   const firstScroll = await first.evaluate((element) => element.scrollTop);
-  await second.focus();
-  await second.press("PageDown");
+  await pageDown(second);
   await expect
     .poll(() => second.evaluate((element) => element.scrollTop))
     .toBeGreaterThan(0);

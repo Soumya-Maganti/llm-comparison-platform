@@ -24,6 +24,8 @@ app = create_app(
         _env_file=None,
         gemini_api_key="test-only",
         database_url=f"sqlite:///{database_file.as_posix()}",
+        comparison_limit_per_minute=1000,
+        comparison_limit_per_day=1000,
     ),
     fake,
 )

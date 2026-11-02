@@ -2,6 +2,8 @@
 
 A full-stack assessment project for comparing two Gemini models. Submit one prompt, read both responses, vote for a preferred answer, and revisit previous comparisons from the same browser.
 
+[Live demo](https://llm-comparison-platform.vercel.app/) · [API documentation](https://llm-comparison-api.onrender.com/docs)
+
 ## Features
 
 - Concurrent requests to two configurable models, with response timing and individual error states.
@@ -58,6 +60,8 @@ Vite proxies `/api` requests to port 8000, so the default local setup does not r
 | `MODEL_B` | Backend | `gemini-3.1-flash-lite`; must differ from `MODEL_A`. |
 | `DATABASE_URL` | Backend | `sqlite:///./comparisons.db`; use a PostgreSQL connection URL for deployment. |
 | `CORS_ORIGINS` | Backend | JSON array, default `["http://localhost:5173"]`. Set exact frontend origins for direct cross-origin requests. |
+| `COMPARISON_LIMIT_PER_MINUTE` | Backend | Shared generation limit, default `3` comparisons per UTC minute. |
+| `COMPARISON_LIMIT_PER_DAY` | Backend | Shared generation limit, default `30` comparisons per UTC day. |
 | `VITE_API_BASE_URL` | Frontend, optional | Empty uses the local proxy. For deployment, use the backend HTTPS origin without `/api`. |
 
 The backend reads its environment file relative to the application location; server environment variables take precedence. Restart the API after changing settings. Relative SQLite paths resolve from the server's working directory: the commands above create `backend/comparisons.db`. Keep that file to retain local data.
@@ -112,6 +116,8 @@ The interactive API documentation describes request validation. Duplicate votes 
 
 History uses an anonymous UUID in local storage rather than an account. Clearing storage, switching browsers, or changing origin creates a separate identity. The UUID is not authentication and does not prevent someone from creating multiple identities. Prompts and responses are stored in the database; prompts are sent to Google.
 
-This assessment does not include authentication, rate limiting, schema migrations, streaming, or automatic submission retries. A request that times out in the browser may still finish on the server; check history before resubmitting. PostgreSQL connectivity and hosted behavior need deployment-specific verification.
+Generation is limited globally to 3 comparisons per minute and 30 per UTC day, shared by all visitors. Each accepted comparison starts two model operations; failed generations still consume a slot. Rejections return HTTP 429 with `Retry-After` in seconds. Counters are stored atomically in the database and survive restarts; changing browser IDs or proxy headers does not bypass them. Fixed windows permit bursts across boundaries, and a visitor can consume the shared allowance and prevent others from comparing. This is a small-demo safeguard, not authentication, comprehensive abuse protection, or a guarantee against provider charges. Other endpoints are not rate limited. Google project billing and quotas must be checked separately.
+
+This assessment does not include authentication, schema migrations, streaming, or automatic submission retries. A request that times out in the browser may still finish on the server; check history before resubmitting. Render Free may need time to wake. History is not suitable for confidential data: anyone who obtains the browser UUID can retrieve it. PostgreSQL connectivity and hosted behavior need deployment-specific verification.
 
 See [DESIGN_NOTES.md](DESIGN_NOTES.md) for architecture and trade-offs, and [DEPLOYMENT.md](DEPLOYMENT.md) for optional Vercel, Render, and Neon configuration.

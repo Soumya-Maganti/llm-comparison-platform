@@ -1,4 +1,6 @@
 import asyncio
+import logging
+import re
 import time
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
@@ -17,6 +19,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    case,
     create_engine,
     event,
     func,
@@ -24,6 +27,8 @@ from sqlalchemy import (
 )
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
+
+logger = logging.getLogger(__name__)
 
 
 class Settings(BaseSettings):
@@ -35,6 +40,8 @@ class Settings(BaseSettings):
     model_b: str = Field(default="gemini-3.1-flash-lite", min_length=1, max_length=200)
     database_url: str = "sqlite:///./comparisons.db"
     cors_origins: list[str] = ["http://localhost:5173"]
+    comparison_limit_per_minute: int = Field(default=3, ge=1, le=10000)
+    comparison_limit_per_day: int = Field(default=30, ge=1, le=10000)
 
     @field_validator("model_a", "model_b", "gemini_api_key", mode="before")
     @classmethod
@@ -50,6 +57,73 @@ class Settings(BaseSettings):
 
 class Base(DeclarativeBase):
     pass
+
+
+class GenerationLimit(Base):
+    __tablename__ = "generation_limits"
+    bucket: Mapped[str] = mapped_column(String(16), primary_key=True)
+    window_start: Mapped[int]
+    count: Mapped[int]
+
+
+def reserve_generation(db: Session, settings: Settings, now: int):
+    # Shared, fixed-size counters work across workers and restarts without trusting
+    # browser IDs, client IPs, or proxy headers. A rejected request rolls back both.
+    if db.bind.dialect.name == "postgresql":
+        from sqlalchemy.dialects.postgresql import insert
+    else:
+        from sqlalchemy.dialects.sqlite import insert
+
+    with db.begin():
+        for bucket, seconds, limit in [
+            ("minute", 60, settings.comparison_limit_per_minute),
+            ("day", 86400, settings.comparison_limit_per_day),
+        ]:
+            start = now // seconds * seconds
+            statement = insert(GenerationLimit).values(
+                bucket=bucket, window_start=start, count=1
+            )
+            current = GenerationLimit.window_start == start
+            statement = statement.on_conflict_do_update(
+                index_elements=[GenerationLimit.bucket],
+                set_={
+                    "window_start": start,
+                    "count": case((current, GenerationLimit.count + 1), else_=1),
+                },
+                where=(~current) | (GenerationLimit.count < limit),
+            ).returning(GenerationLimit.count)
+            if db.scalar(statement) is None:
+                raise HTTPException(
+                    429,
+                    "Comparison limit reached. Please try again later.",
+                    headers={"Retry-After": str(start + seconds - now)},
+                )
+
+
+def log_provider_failure(model: str, failure: Exception | None = None, *, timeout=False):
+    # Only allowlisted identifiers, numeric status and parsed retry duration enter
+    # logs. Never stringify exceptions or log their messages/response bodies.
+    code = getattr(failure, "code", None)
+    status = code if type(code) is int and 100 <= code <= 599 else None
+    category = "timeout" if timeout else {
+        400: "invalid_request", 401: "authentication", 403: "permission",
+        404: "not_found", 429: "quota_or_rate_limit",
+    }.get(status, "provider_unavailable" if status and status >= 500 else "unknown")
+    retry = None
+    payload = getattr(failure, "response_json", None)
+    if isinstance(payload, dict):
+        error = payload.get("error", payload)
+        details = error.get("details", []) if isinstance(error, dict) else []
+        if isinstance(details, list):
+            for detail in details:
+                value = detail.get("retryDelay") if isinstance(detail, dict) else None
+                if isinstance(value, str) and re.fullmatch(r"\d{1,6}(?:\.\d{1,3})?s", value):
+                    retry = float(value[:-1])
+    safe_model = model if re.fullmatch(r"(?:models/)?gemini-[a-z0-9.-]{1,100}", model) else "unrecognized"
+    logger.warning(
+        "provider_failure model=%s http_status=%s category=%s retry_after_seconds=%s",
+        safe_model, status, category, retry,
+    )
 
 
 class Comparison(Base):
@@ -124,8 +198,10 @@ async def generate(settings: Settings, model: str, prompt: str):
             if not text.strip():
                 error = "The model returned no text. Try a different prompt."
     except asyncio.TimeoutError:
+        log_provider_failure(model, timeout=True)
         error = "Model request timed out. Please try again."
-    except Exception:
+    except Exception as failure:
+        log_provider_failure(model, failure)
         # Provider exceptions can contain credentials or request contents.
         error = (
             "Model request failed. Check backend credentials, model access, and quota."
@@ -172,6 +248,7 @@ def create_app(settings: Settings | None = None, generator=generate):
         allow_origins=settings.cors_origins,
         allow_methods=["GET", "POST"],
         allow_headers=["Content-Type"],
+        expose_headers=["Retry-After"],
     )
 
     def database():
@@ -220,6 +297,7 @@ def create_app(settings: Settings | None = None, generator=generate):
             raise HTTPException(
                 503, "Set GEMINI_API_KEY in backend/.env before comparing models."
             )
+        reserve_generation(db, settings, int(time.time()))
         results = await asyncio.gather(
             *(
                 generator(settings, model, body.prompt)
